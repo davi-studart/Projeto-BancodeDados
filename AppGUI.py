@@ -1,102 +1,8 @@
 import tkinter as tk
-from tkinter import filedialog, messagebox, ttk
+from tkinter import filedialog, messagebox
 import time
-import math
-
-# ==========================================
-# LÓGICA DO BACKEND (ESTRUTURAS DE DADOS)
-# ==========================================
-
-class Database:
-    def __init__(self):
-        self.records = []
-        self.pages =[] # Lista de páginas (cada página é uma lista de registros)
-        self.page_size = 0
-        self.total_pages = 0
-
-    def load_data(self, filepath):
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                # Cada linha é tratada como um registro/chave única
-                self.records = [line.strip() for line in f if line.strip()]
-            return len(self.records)
-        except Exception as e:
-            raise Exception(f"Erro ao ler arquivo: {e}")
-
-    def paginate_data(self, page_size):
-        self.page_size = page_size
-        self.pages =[]
-        # HU03: Dividir registros em páginas
-        for i in range(0, len(self.records), page_size):
-            self.pages.append(self.records[i:i+page_size])
-        self.total_pages = len(self.pages)
-
-    def table_scan(self, search_key):
-        # HU10: Table scan
-        pages_read = 0
-        for page_idx, page in enumerate(self.pages):
-            pages_read += 1
-            if search_key in page:
-                return True, page_idx, pages_read
-        return False, -1, pages_read
-
-
-class StaticHashIndex:
-    def __init__(self):
-        self.buckets = {}
-        self.nb = 0 # Número de buckets
-        self.fr = 0 # Fator de bloco (Capacidade do bucket)
-        self.total_collisions = 0
-        self.overflow_buckets = set()
-
-    def deterministic_hash(self, key):
-        # RNF05: Função Hash determinística. 
-        # Algoritmo djb2 (simples e distribui bem strings)
-        hash_val = 5381
-        for char in key:
-            hash_val = ((hash_val << 5) + hash_val) + ord(char)
-        return hash_val % self.nb
-
-    def build_index(self, db: Database, fr: int):
-        nr = len(db.records)
-        self.fr = fr
-        # RN08: NB > NR / FR
-        self.nb = math.ceil(nr / fr) + 1 # +1 para garantir que é maior
-        
-        self.buckets = {i:[] for i in range(self.nb)}
-        self.total_collisions = 0
-        self.overflow_buckets = set()
-
-        # HU06: Construir índice percorrendo páginas
-        for page_id, page in enumerate(db.pages):
-            for key in page:
-                bucket_addr = self.deterministic_hash(key)
-                
-                # Regra do Professor (RN14): Colisão é considerada quando bucket enche.
-                if len(self.buckets[bucket_addr]) >= self.fr:
-                    self.total_collisions += 1
-                    self.overflow_buckets.add(bucket_addr)
-                
-                # Armazena tupla: (Chave, ID da Página)
-                self.buckets[bucket_addr].append((key, page_id))
-
-    def search_index(self, search_key):
-        # HU09: Busca usando índice
-        bucket_addr = self.deterministic_hash(search_key)
-        bucket = self.buckets.get(bucket_addr,[])
-        
-        # Custo: 1 leitura de índice (bucket principal) + leituras de overflow + 1 leitura da página de dados
-        # Vamos estimar que cada bloco extra no bucket (acima de FR) conte como leitura de bloco de overflow
-        blocos_overflow = math.ceil(len(bucket) / self.fr) if len(bucket) > 0 else 0
-        
-        for key, page_id in bucket:
-            if key == search_key:
-                # Custo = blocos lidos no índice + 1 (a página de dados)
-                custo_estimado = blocos_overflow + 1 
-                return True, page_id, bucket_addr, custo_estimado
-        
-        return False, -1, bucket_addr, blocos_overflow
-
+from Database import Database
+from Hash import StaticHashIndex
 # ==========================================
 # INTERFACE GRÁFICA (FRONTEND TKINTER)
 # ==========================================
@@ -259,8 +165,3 @@ class AppGUI:
             self.txt_results.insert(tk.END, f"=== COMPARAÇÃO DE DESEMPENHO ===\n")
             self.txt_results.insert(tk.END, f"Diferença de tempo: O índice foi {diff_time:.6f} seg mais rápido.\n")
             self.txt_results.insert(tk.END, f"Economia no Custo (I/O): {economia_custo:.2f}% a menos de leituras no disco.\n")
-
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = AppGUI(root)
-    root.mainloop()
